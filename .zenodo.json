@@ -1,0 +1,26 @@
+{
+  "title": "Divergent urban and rural environmental drivers of foodborne norovirus and its dissociation from the paediatric disease burden: a Bayesian spatial analysis across South Korean districts, 2020–2024 — analysis code",
+  "description": "Reproducible R (R-INLA) analysis code for a district-level Bayesian negative-binomial Besag–York–Mollié spatial analysis of foodborne norovirus across South Korean districts, 2020–2024 (urban/rural stratified; paediatric dissociation test; BYM2, neighbourhood-graph and prior robustness; case-versus-outbreak sensitivity). Manuscript submitted to Science of the Total Environment. Raw data are aggregated official statistics with no personal identifiers and are not redistributed.",
+  "upload_type": "software",
+  "license": "MIT",
+  "access_right": "open",
+  "keywords": [
+    "norovirus",
+    "foodborne disease",
+    "spatial epidemiology",
+    "Bayesian hierarchical model",
+    "Besag-York-Mollie",
+    "INLA",
+    "Republic of Korea"
+  ],
+  "creators": [
+    {
+      "name": "Kim, Seongdae",
+      "affiliation": "Hongik University, Seoul, Republic of Korea"
+    },
+    {
+      "name": "Chun, Byung Chul",
+      "affiliation": "Korea University College of Medicine, Seoul, Republic of Korea"
+    }
+  ]
+}
