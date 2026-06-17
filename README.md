@@ -1,5 +1,8 @@
 # Foodborne norovirus — district-level Bayesian spatial analysis, Republic of Korea, 2020–2024
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20725142.svg)](https://doi.org/10.5281/zenodo.20725142)
+
+
 Reproducible R analysis code for the manuscript:
 **"Divergent urban and rural environmental drivers of foodborne norovirus and its dissociation from the paediatric disease burden: a Bayesian spatial analysis across South Korean districts, 2020–2024"** (submitted to *Science of the Total Environment*).
 
@@ -50,7 +53,7 @@ Spearman ρ ≈ 0.95.
 ## Citation
 Kim S, Chun BC. Divergent urban and rural environmental drivers of foodborne norovirus and its
 dissociation from the paediatric disease burden: a Bayesian spatial analysis across South Korean
-districts, 2020–2024 (manuscript under review). Citation to be updated on publication.
+districts, 2020–2024 (manuscript under review). Archived code: https://doi.org/10.5281/zenodo.20725142 (Zenodo). Citation to be updated on publication.
 
 ## License
 MIT (code) — see `LICENSE`.
