@@ -7,6 +7,9 @@ Reproducible R analysis code for the manuscript:
 **"Divergent urban and rural environmental drivers of foodborne norovirus and its dissociation from the paediatric disease burden: a Bayesian spatial analysis across South Korean districts, 2020–2024"** (submitted to *Science of the Total Environment*).
 
 ## Contents
+- `DATA_DICTIONARY.md` — English glosses for every district-level covariate
+  (Korean column key → English label → hypothesised direction), a reading aid for
+  the Korean variable names retained in the script.
 - `norovirus_spatial_korea.R` — full pipeline:
   data loading → pre-specified covariate construction (transformation + z-standardisation) →
   urban/rural stratification (Total / Urban / Rural) → Bayesian negative-binomial models with
