@@ -15,7 +15,7 @@ Reproducible R analysis code for the manuscript:
   specifications M1–M6 (principal model M4) → Global Moran's I (pre/post) and high-/low-risk
   district mapping → paediatric battery (collinearity/VIF + dissociation test) →
   robustness (BYM2 φ, eight neighbourhood graphs, alternative precision priors) →
-  case-versus-outbreak counting-unit sensitivity → result tables (xlsx).
+  case-versus-outbreak counting-unit sensitivity → peer-review robustness extensions (CPO/predictive checks, ridge-type regularization, RW1 temporal effects, a unified urbanicity-interaction model, a k-nearest-neighbour spatial graph, sewerage-coverage adjustment, and per-standard-deviation covariate magnitudes) → result tables (xlsx).
 
 ## Data availability
 The inputs are aggregated official statistics with **no personal identifiers** and are **not

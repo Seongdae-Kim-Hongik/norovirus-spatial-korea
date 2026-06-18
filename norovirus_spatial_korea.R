@@ -37,6 +37,8 @@
 #    add-on: paediatric battery (collinearity/VIF + dissociation)     -> Table 2; Table S4; Fig S3
 #    add-on: robustness BYM2 phi / 8 neighbour graphs / priors        -> Tables S6, S7, S8
 #    add-on: case-vs-outbreak counting-unit sensitivity               -> Table S9
+#    robustness extensions: CPO(Q4), ridge(Q5), RW1(Q12), urbanicity-
+#      interaction(Q8), kNN graph(Q9), sewerage adj(Q6), per-SD(Q10) -> Supp S4/S2
 #
 #  Headline numbers reproduced (deterministic INLA, exact):
 #    Total M4 — groundwater reliance IRR 1.52 (1.04–2.23), peri-urban pastureland
@@ -1425,3 +1427,91 @@ write.csv(out, file.path(DIR_OUT, "노로_사례vs건수_시군구.csv"), row.na
 cat(sprintf("\n저장: %s\n", file.path(DIR_OUT,"노로_사례vs건수_시군구.csv")))
 cat("\n요약: 단위(사례↔건수)를 바꿔도 시군구 공간 순위·핫스팟·BYM2 공간효과가 일관 → 결론 강건.\n")
 }, error=function(e) cat(sprintf("\n\u26a0 [\ud1b5\ud569\ube14\ub85d \uac74\ub108\ub700: case-vs-outbreak 민감도] %s\n", conditionMessage(e))))
+
+# =============================================================================
+#  ROBUSTNESS EXTENSIONS — peer-review pre-emption (reuses in-memory objects
+#  from the main pipeline above: res_final, base_f, g_main, FAMILY, cor_merged,
+#  shp_main, YEAR_START). Adds, for the national (Total) model:
+#    Q4  posterior predictive  — CPO (raw count-PIT is non-uniform by construction
+#                                and is NOT used as an adequacy test)
+#    Q5  ridge-type regularization (N(0,1) prior on fixed effects)
+#    Q12 RW1 temporal (year) effects
+#    Q8  unified urbanicity-interaction model (partial pooling vs stratification)
+#    Q9  alternative spatial strategy: k-nearest-neighbour graph (no contiguity)
+#    Q6  sewerage-coverage adjustment (environmental-anchor model)
+#    Q10 per-1-SD magnitudes of the transformed covariates
+#  Notes: BYM hyper keywords are prec.unstruct / prec.spatial (NOT prec);
+#         interaction terms are named "{covariate}:urban" (covariate first).
+# =============================================================================
+tryCatch({
+  suppressPackageStartupMessages({library(INLA); library(spdep); library(sf); library(dplyr)})
+  RF <- res_final; ic <- RF$ic; FMAP <- RF$FMAP
+  if (!exists("base_f")) base_f <- paste("cases ~", paste(FMAP$safe, collapse=" + "), "+ offset(log(population+1))")
+  if (!"year" %in% names(ic)) ic$year <- (YEAR_START - 1L) + ic$idtime
+  H_BYM  <- list(prec.unstruct=list(prior="pc.prec",param=c(0.5,0.01)), prec.spatial=list(prior="pc.prec",param=c(0.5,0.01)))
+  H_PREC <- list(prec=list(prior="pc.prec",param=c(0.5,0.01)))
+  f_m4 <- paste(base_f, "+ f(idarea,model='bym',graph=g_main,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)")
+  cred <- c("ranch_z","gw_civil_count_z","ww_effluent_z","reservoir_z")  # 4 credible Total determinants
+  irr <- function(fit,v){fx<-fit$summary.fixed; if (v %in% rownames(fx))
+      sprintf("%.2f (%.2f-%.2f)%s", exp(fx[v,"mean"]), exp(fx[v,"0.025quant"]), exp(fx[v,"0.975quant"]),
+              ifelse(fx[v,"0.025quant"]>0|fx[v,"0.975quant"]<0,"*","")) else "NA"}
+  cat("\n\n", strrep("=",70), "\n  ROBUSTNESS EXTENSIONS (Q4-Q12)\n", strrep("=",70), "\n", sep="")
+
+  ## Q4 CPO
+  m4 <- inla(as.formula(f_m4), family=FAMILY, data=ic,
+             control.compute=list(dic=TRUE,waic=TRUE,cpo=TRUE), control.predictor=list(link=1), verbose=FALSE)
+  cat(sprintf("[Q4 CPO] computed for %d/%d district-years (%d flagged); LCPO=%.3f\n",
+      sum(m4$cpo$failure==0,na.rm=TRUE), length(m4$cpo$failure), sum(m4$cpo$failure>0,na.rm=TRUE),
+      -mean(log(m4$cpo$cpo[m4$cpo$cpo>0]),na.rm=TRUE)))
+
+  ## Q5 ridge
+  m5 <- inla(as.formula(f_m4), family=FAMILY, data=ic, control.fixed=list(prec=1,prec.intercept=1e-3),
+             control.compute=list(dic=TRUE), control.predictor=list(link=1), verbose=FALSE)
+  cat("[Q5 ridge N(0,1)] 4 credible determinants:\n"); for (v in cred) cat(sprintf("   %-18s %s\n", v, irr(m5,v)))
+
+  ## Q12 RW1
+  m12 <- inla(as.formula(paste(f_m4,"+ f(idtime,model='rw1',hyper=H_PREC)")), family=FAMILY, data=ic,
+              control.compute=list(dic=TRUE), control.predictor=list(link=1), verbose=FALSE)
+  if (!is.null(m12$summary.random$idtime)) { cat("[Q12 RW1 year effects] (log scale):\n")
+    print(round(m12$summary.random$idtime[,c("ID","mean","0.025quant","0.975quant")],3)) }
+
+  ## Q8 unified urbanicity-interaction
+  ic$urban <- as.integer(!grepl("군$", as.character(ic$region)))
+  ikeys <- c("ranch_z","sludge_moisture_z","ww_effluent_z","gw_civil_count_z","reservoir_z","child_0_4_z","sludge_total_z")
+  ikeys <- ikeys[ikeys %in% names(ic)]
+  f_int <- paste(base_f, "+ urban +", paste(sprintf("urban:%s",ikeys),collapse=" + "),
+                 "+ f(idarea,model='bym',graph=g_main,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)")
+  m8 <- inla(as.formula(f_int), family=FAMILY, data=ic, control.compute=list(dic=TRUE), control.predictor=list(link=1), verbose=FALSE)
+  cat(sprintf("[Q8 unified interaction] DIC=%.2f (vs stratified ~2377); interaction terms {covariate}:urban:\n", m8$dic$dic))
+  for (k in ikeys) { ik <- paste0(k,":urban"); if (ik %in% rownames(m8$summary.fixed)) cat(sprintf("   %-22s %s\n", ik, irr(m8,ik))) }
+
+  ## Q9 kNN spatial strategy
+  shp_q9 <- shp_main; if (is.na(sf::st_crs(shp_q9))) sf::st_crs(shp_q9) <- 5179
+  cc <- suppressWarnings(sf::st_coordinates(sf::st_centroid(sf::st_geometry(shp_q9))))
+  knn <- spdep::make.sym.nb(spdep::knn2nb(spdep::knearneigh(cc,k=5)))
+  gp <- file.path(tempdir(),"knn.graph"); spdep::nb2INLA(gp, knn); g_knn <- INLA::inla.read.graph(gp)
+  m9 <- inla(as.formula(paste(base_f,"+ f(idarea,model='bym',graph=g_knn,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)")),
+             family=FAMILY, data=ic, control.compute=list(dic=TRUE), control.predictor=list(link=1), verbose=FALSE)
+  cat("[Q9 kNN(5) spatial graph] 4 credible determinants:\n"); for (v in cred) cat(sprintf("   %-18s %s\n", v, irr(m9,v)))
+
+  ## Q6 sewerage-coverage adjustment (environmental-anchor model)
+  sew_col <- "공공하수처리구역인구보급률(%)"  # public-sewerage population coverage (%)
+  if (sew_col %in% names(cor_merged)) {
+    sew <- cor_merged %>% group_by(region, year=as.integer(year)) %>%
+      summarise(sew=mean(as.numeric(.data[[sew_col]]),na.rm=TRUE), .groups="drop")
+    icq <- ic %>% left_join(sew, by=c("region","year"))
+    icq$sew[is.na(icq$sew)|!is.finite(icq$sew)] <- mean(icq$sew[is.finite(icq$sew)],na.rm=TRUE)
+    icq$sew_z <- as.numeric(scale(icq$sew))
+    anch <- "ww_effluent_z + ranch_z + gw_civil_count_z + reservoir_z"
+    sp <- "+ offset(log(population+1)) + f(idarea,model='bym',graph=g_main,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)"
+    a0 <- inla(as.formula(paste("cases ~",anch,sp)), family=FAMILY, data=icq, control.predictor=list(link=1), verbose=FALSE)
+    a1 <- inla(as.formula(paste("cases ~",anch,"+ sew_z",sp)), family=FAMILY, data=icq, control.predictor=list(link=1), verbose=FALSE)
+    cat(sprintf("[Q6 sewerage] wastewater-effluent IRR: without=%s | with=%s | cor(sew,ww)=%.2f\n",
+        irr(a0,"ww_effluent_z"), irr(a1,"ww_effluent_z"), cor(icq$sew_z, as.numeric(icq$ww_effluent_z), use="complete.obs")))
+  }
+
+  ## Q10 SD magnitudes of transformed covariates
+  cat("[Q10 SD of transformed covariate (unit of 'per 1 SD' IRR)]:\n")
+  for (i in seq_len(nrow(FMAP))) { code <- FMAP$code[i]
+    if (code %in% names(ic)) cat(sprintf("   %-26s (%s) SD=%.4g\n", FMAP$kr[i], FMAP[["형태"]][i], sd(as.numeric(ic[[code]]),na.rm=TRUE))) }
+}, error=function(e) cat(sprintf("\n[robustness extensions skipped] %s\n", conditionMessage(e))))
