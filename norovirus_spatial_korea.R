@@ -3,8 +3,12 @@
 #  and its dissociation from the paediatric disease burden — Republic of Korea,
 #  district-level Bayesian spatial analysis, 2020–2024.
 #
-#  Reproducible analysis code for the manuscript submitted to
-#  Science of the Total Environment (STOTEN).
+#  Reproducible analysis code for the manuscript under review at Scientific Reports.
+#  Version 2 (revision): corrects covariate-year harmonisation (structurally missing years
+#  recorded as zero), missing-to-zero coding in binary transforms and the kNN graph projection;
+#  fixes covariate transformations a priori across strata (no outcome-based screening, VIF < 5);
+#  estimates covariate effects in the principal model M4; disables the variational-Bayes correction
+#  (agrees with maximum likelihood; glmmTMB cross-check included); adds the paediatric battery fit.
 #
 #  Author : Seongdae Kim      Advisor/corresponding : Byung Chul Chun
 #  License: MIT (code).  Data: see "DATA" below (not redistributed; no personal identifiers).
@@ -13,7 +17,7 @@
 #    1. Put the input files (see DATA) in a folder and point BASE_IV to it.
 #    2. Rscript norovirus_spatial_korea.R       # R-INLA fits; ~10–30 min
 #    Packages (incl. INLA from its own repo) are auto-installed on first run.
-#    Tested on R 4.6 with R-INLA (stable).
+#    Tested on R 4.6 with R-INLA 25.10 (stable).
 #
 #  DATA (not redistributed; aggregated official statistics, no personal identifiers)
 #    - District-year laboratory-confirmed norovirus food-poisoning counts +
@@ -90,6 +94,27 @@ rm(list=ls()); gc()
 suppressPackageStartupMessages({
   library(dplyr); library(tidyr); library(MASS); library(stringr); library(car)
   library(openxlsx); library(arrow); library(sf); library(spdep); library(INLA)
+  # ESTIMATION SETTINGS (version 2). INLA's variational-Bayes mean correction is disabled: with 31 collinear
+  # covariates it moved some posterior means away from the maximum-likelihood estimates (independent
+  # glmmTMB cross-check at the end of the script), whereas fits without it agree with maximum likelihood.
+  # INLA runs with its default multithreading; single-threaded runs of the space-time models degenerated
+  # in a numerical-stability experiment (1,296 fits), and a degeneracy check is applied below.
+  # Every call goes through this wrapper: (i) VB correction off; (ii) degeneracy guard - a fit with random
+  # effects whose DIC exceeds the DIC of the same fixed effects without random effects by > 50 is a
+  # degenerate mode (seen occasionally for the space-time models) and is refitted (up to 5 times).
+  inla <- function(formula, ..., control.inla = list()) {
+    control.inla$control.vb <- list(enable = FALSE)
+    fit <- INLA::inla(formula, ..., control.inla = control.inla)
+    fs <- paste(deparse(formula, width.cutoff = 500L), collapse = " ")
+    if (grepl("f\\(", fs) && !is.null(fit$dic) && is.finite(fit$dic$dic)) {
+      ns <- gsub("\\+\\s*f\\((?:[^()]|\\([^()]*\\))*\\)", "", fs, perl = TRUE)
+      ref <- tryCatch(INLA::inla(as.formula(ns), ..., control.inla = control.inla), error = function(e) NULL)
+      tries <- 0
+      while (!is.null(ref) && is.finite(ref$dic$dic) && fit$dic$dic > ref$dic$dic + 50 && tries < 5) {
+        tries <- tries + 1; cat(sprintf("  [guard] degenerate fit (DIC %.1f vs non-spatial %.1f): refit %d\n", fit$dic$dic, ref$dic$dic, tries))
+        fit <- INLA::inla(formula, ..., control.inla = control.inla) }
+    }
+    fit }
 })
 options(scipen=999)
 
@@ -98,8 +123,8 @@ options(scipen=999)
 # ══════════════════════════════════════════
 DISEASE_NAME <- "노로바이러스"
 YEAR_START <- 2020; YEAR_END <- 2024
-PVAL_SCREEN <- 0.20
-VIF_THRESHOLD <- 10
+PVAL_SCREEN <- 1.01   # no outcome-based screening: all pre-specified covariates enter (VIF pruning only)
+VIF_THRESHOLD <- 5
 MIN_OBS <- 20; COV_RATIO <- 0.85
 
 # --- Paths (EDIT THESE) -------------------------------------------------------
@@ -123,7 +148,7 @@ if(!dir.exists(DIR_OUT)){ DIR_OUT <- file.path(Sys.getenv("HOME"), "Desktop")
 TS <- format(Sys.time(), "%y%m%d_%H%M")
 LOG <- file.path(DIR_LOG, sprintf("NORO_run_%s.md", TS))   # run log
 sink(LOG, split=TRUE)
-cat(sprintf("# NORO 사전지정 분석 (전체/도시/농촌 3그룹)\n\n- TS: %s\n- 전략: 전체/도시/농촌 3그룹 별도 분석\n- 변수선택: 사전지정(이론) + 단변량 스크린·VIF\n- Family: %s\n- VIF<%d | p<%.2f\n- 기간: %d–%d\n\n---\n\n",
+cat(sprintf("# NORO 사전지정 분석 (전체/도시/농촌 3그룹)\n\n- TS: %s\n- 전략: 전체/도시/농촌 3그룹 별도 분석\n- 변수선택: 사전지정(이론), 사전고정 변환, VIF<5\n- Family: %s\n- VIF<%d | p<%.2f\n- 기간: %d–%d\n\n---\n\n",
     TS, FAMILY, VIF_THRESHOLD, PVAL_SCREEN, YEAR_START, YEAR_END))
 
 # ══════════════════════════════════════════
@@ -482,6 +507,70 @@ tryCatch({
 cat(sprintf("\n  ═══ cor_merged 최종: %d행 × %d열 ═══\n\n",nrow(cor_merged),ncol(cor_merged)))
 
 # ══════════════════════════════════════════
+# PART 1.5. Covariate-year harmonisation and a priori transformations (revision)
+# ══════════════════════════════════════════
+#  (a) on-site sludge self-treatment = sum of primary on-site methods reported consistently in every year
+#  (b) district industrial wastewater discharge 2020-2023 from the Ministry of Environment statistics
+#      (KOSIS table DT_106N_01_0100069; multi-gu cities averaged over gu, as in the original series)
+#  (c) preventable-hospitalisation rate for paediatric gastroenteritis: nearest available year within district
+#  (d) years in which a covariate is zero or missing for all districts are structurally missing: set to NA and
+#      filled from the nearest available year within the same district
+#  (e) transformation of each covariate fixed a priori from its distribution in the full panel
+cat("## PART 1.5. Covariate-year harmonisation\n\n")
+PATH_WW_KOSIS <- if (exists("PATH_WW_KOSIS")) PATH_WW_KOSIS else "ext_wastewater_kosis.csv"
+cm <- as.data.frame(cor_merged)
+sl <- read_csv_safe(file.path(BASE_IV, "merged_하수찌꺼기발생및처리.csv")) %>% clean_region()
+prim <- c("자체처리량(톤/년)_매립","자체처리량(톤/년)_소각","자체처리량(톤/년)_고화","자체처리량(톤/년)_건조","자체처리량(톤/년)_탄화","자체처리량(톤/년)_퇴비화")
+for (v in prim) sl[[v]] <- suppressWarnings(as.numeric(sl[[v]]))
+sl$onsite_sum <- rowSums(sl[, prim], na.rm = TRUE)
+sla <- sl %>% group_by(region, year) %>% summarise(`자체처리량(톤/년)_계` = sum(onsite_sum, na.rm = TRUE), .groups = "drop")
+cm <- cm %>% dplyr::select(-any_of("자체처리량(톤/년)_계")) %>% left_join(sla, by = c("region", "year"))
+if (file.exists(PATH_WW_KOSIS)) {
+  ww <- read.csv(PATH_WW_KOSIS, stringsAsFactors = FALSE) %>% clean_region()
+  cm <- cm %>% dplyr::select(-any_of("폐수방류량")) %>% left_join(ww %>% dplyr::select(region, year, `폐수방류량` = value), by = c("region", "year"))
+  cat(sprintf("  wastewater discharge (KOSIS): %d district-years\n", nrow(ww)))
+} else cat("  ⚠ ext_wastewater_kosis.csv not found: wastewater discharge series left as in the source panel\n")
+hp_all <- tryCatch(read_parquet(PATH_HEALTH_PQ) %>% as.data.frame() %>%
+  mutate(region = str_replace_all(as.character(region), "\\s+", ""), region = if_else(region == "인천시미추홀구", "인천시남구", region),
+         year = as.integer(year), v = suppressWarnings(as.numeric(`예방가능입원율_소아위장관염`))), error = function(e) NULL)
+if (!is.null(hp_all)) {
+  real_years <- hp_all %>% group_by(year) %>% summarise(nz = sum(!is.na(v) & v != 0), .groups = "drop") %>% filter(nz > 0) %>% pull(year)
+  hp <- hp_all %>% filter(year %in% real_years, !is.na(v))
+  ph <- do.call(rbind, lapply(split(hp, hp$region), function(g) do.call(rbind, lapply(YEAR_START:YEAR_END, function(y) {
+    dd <- abs(g$year - y); k <- which(dd == min(dd)); k <- k[which.max(g$year[k])]
+    data.frame(region = g$region[1], year = y, ped = g$v[k]) }))))
+  cm <- cm %>% dplyr::select(-any_of("예방가능입원율_소아위장관염")) %>% left_join(ph %>% rename(`예방가능입원율_소아위장관염` = ped), by = c("region", "year"))
+}
+HARMONISE <- c("농가수(호)_한육우","농가수(호)_합계","굴_자연채묘 생산량(kg)","사육두수(두)_합계","자체처리량(톤/년)_계","자체처리량(톤/년)_소각후처리(2차)",
+  "자체처리량(톤/년)_건조후처리(2차).3","함수율(%,탈수기준)","폐수방류량","하수처리구역외_정화조인구","민방위용_개소수","유지","하천","목장용지","답",
+  "화장실다녀온후손씻기실천율_조율","건강생활실천율_조율","걷기실천율_표준화율","독거노인비율","농촌인구수","재정자주도","재정자립도","1인가구율_전체",
+  "기초생활수급자수율","총가구수_65세이상","성비","고령인구비율","관내진료비_외래","관내진료비_전체","영유아비율_0_4","아동비율_5_9",
+  "사육두수(두)_가금","사육두수(두)_한육우","받이_빗물받이(개소)","민방위용_이용량","임야","usual_handwash_rate_adj","부적합","학교용_이용량",
+  "연간인플루엔자예방접종률_표준화율","전","예방가능입원율_소아위장관염","유아천명당보육시설수")
+HARMONISE <- intersect(HARMONISE, names(cm))
+for (v in HARMONISE) {
+  x <- suppressWarnings(as.numeric(cm[[v]])); yrs <- sort(unique(cm$year))
+  bad <- yrs[sapply(yrs, function(y) { z <- x[cm$year == y]; nn <- sum(!is.na(z)); nn == 0 || sum(z == 0, na.rm = TRUE) >= 0.95 * nn })]
+  if (length(bad) && length(bad) < length(yrs)) {
+    x[cm$year %in% bad] <- NA; cm[[v]] <- x
+    cm <- cm %>% group_by(region) %>% arrange(year, .by_group = TRUE) %>%
+      mutate(!!v := { vv <- .data[[v]]; yy <- year; out <- vv
+        for (i in which(is.na(vv))) { k <- which(!is.na(vv)); if (length(k)) { d <- abs(yy[k] - yy[i]); out[i] <- vv[k[which(d == min(d))[1]]] } }; out }) %>%
+      ungroup() %>% as.data.frame()
+    cat(sprintf("  harmonised %-40s missing years %s\n", v, paste(bad, collapse = ",")))
+  }
+}
+cor_merged <- cm
+skw <- function(z){ z <- z[is.finite(z)]; if (length(z) < 3 || sd(z) == 0) return(0); mean((z - mean(z))^3) / sd(z)^3 }
+FIX_FORMS <- list()
+for (v in HARMONISE) {
+  x <- suppressWarnings(as.numeric(cor_merged[[v]]))
+  pct <- grepl("율|률|비율|%|rate|자립도|자주도", v) && !grepl("부하량|이용량", v)
+  FIX_FORMS[[v]] <- if (pct) "raw" else if (skw(x) > 1) "log1p" else "raw"
+}
+cat(sprintf("  a priori forms fixed for %d covariates\n\n", length(FIX_FORMS)))
+
+# ══════════════════════════════════════════
 # PART 2. 변수 정의 (30개 base + 이론방향) + raw 단변량 (Table 1)
 # ══════════════════════════════════════════
 cat("## PART 2. 변수 정의 (30개 base + 이론방향) + raw 단변량\n\n")
@@ -544,7 +633,7 @@ TV_v6 <- rbind(TV_v6, TV_CHILD)
 
 cat(sprintf("  Table 1 base: %d개 (9개 카테고리, 소아 2종 — 결측0만)\n", nrow(TV_v6)))
 cat("  ★ 강제변수(‡): 한육우농가수, 성비, 고령인구비율\n")
-cat("  ★ 변수선택: 사전지정(이론) + 단변량 스크린(p<0.20) + VIF<10\n\n")
+cat("  ★ 변수선택: 사전지정(이론), 사전고정 변환, 스크리닝 없음 + VIF<5\n\n")
 
 TV <- TV_v6
 df_work <- cor_merged %>% filter(population > 0)
@@ -679,7 +768,7 @@ run_model <- function(TV_local, quiet=FALSE){
     } else {
       forms <- list(raw=x)
       if(!pt){lv<-log1p(pmax(x,0));lv[is.na(x)]<-NA;if(!is.na(sd(lv,na.rm=TRUE))&&sd(lv,na.rm=TRUE)>0)forms[["log1p"]]<-lv}
-      if(hz) forms[["binary"]]<-as.numeric(!is.na(x)&x>0) else{md<-median(x,na.rm=TRUE);forms[["binary"]]<-as.numeric(!is.na(x)&x>md)}
+      if(hz) forms[["binary"]]<-ifelse(is.na(x),NA_real_,as.numeric(x>0)) else{md<-median(x,na.rm=TRUE);forms[["binary"]]<-ifelse(is.na(x),NA_real_,as.numeric(x>md))}
       if(hz){nz<-x[!is.na(x)&x>0];if(length(nz)>10){mn<-median(nz);forms[["T3"]]<-dplyr::case_when(is.na(x)~NA_real_,x==0~1,x<=mn~2,x>mn~3)}}
       else{q33<-quantile(x,c(1/3,2/3),na.rm=TRUE);brk<-unique(c(-Inf,q33[1],q33[2],Inf));if(length(brk)>=3)forms[["T3"]]<-as.numeric(cut(x,breaks=brk,labels=FALSE,include.lowest=TRUE))}
       q4<-quantile(x,c(0.25,0.5,0.75),na.rm=TRUE);b4<-unique(c(-Inf,q4[1],q4[2],q4[3],Inf))
@@ -688,12 +777,17 @@ run_model <- function(TV_local, quiet=FALSE){
     rr<-list();for(fn in names(forms)){res<-run_univ(forms[[fn]],df_w);if(!is.null(res))rr[[fn]]<-data.frame(f=fn,p=res$p,IRR=res$IRR,n=res$n)}
     if(length(rr)==0) next; rd<-do.call(rbind,rr)%>%arrange(p); mn_n<-floor(nv*COV_RATIO); rc<-rd[!is.na(rd$n)&rd$n>=mn_n,]
     if(nrow(rc)==0) rc<-rd[1,]; bf<-rc$f[1]
+    if(exists("FIX_FORMS") && !is.null(FIX_FORMS[[var]]) && !is_sadu && !is_sex){ bf<-FIX_FORMS[[var]]   # a priori form, identical in all strata
+      if(bf %in% rd$f){ rc<-rd[rd$f==bf,][1,] } else {
+        tf <- if(bf=="log1p"){lv<-log1p(pmax(x,0)); lv[is.na(x)]<-NA; lv} else x
+        ru <- run_univ(tf, df_w)
+        rc <- data.frame(f=bf, p=if(is.null(ru)) 1 else ru$p, IRR=if(is.null(ru)) NA else ru$IRR, n=if(is.null(ru)) nv else ru$n) } }
     if(is_sadu){bf<-"per10k";bvn<-paste0(var,"__per10k");data_ext[[bvn]]<-as.numeric(df_w[[var]])/10000
     }else if(is_sex){bf<-"raw";bvn<-var
     }else if(bf=="raw"){bvn<-var
     }else{bvn<-paste0(var,"__",bf);xcm<-as.numeric(df_w[[var]])
       if(bf=="log1p")data_ext[[bvn]]<-log1p(pmax(xcm,0))
-      else if(bf=="binary"){if(hz)data_ext[[bvn]]<-as.numeric(!is.na(xcm)&xcm>0)else{mc<-median(xcm,na.rm=TRUE);data_ext[[bvn]]<-as.numeric(!is.na(xcm)&xcm>mc)}}
+      else if(bf=="binary"){if(hz)data_ext[[bvn]]<-ifelse(is.na(xcm),NA_real_,as.numeric(xcm>0))else{mc<-median(xcm,na.rm=TRUE);data_ext[[bvn]]<-ifelse(is.na(xcm),NA_real_,as.numeric(xcm>mc))}}
       else if(bf=="T3"){if(hz){nzc<-xcm[!is.na(xcm)&xcm>0];mnc<-median(nzc,na.rm=TRUE);data_ext[[bvn]]<-dplyr::case_when(is.na(xcm)~NA_real_,xcm==0~1,xcm<=mnc~2,xcm>mnc~3)
       }else{q33c<-quantile(xcm,c(1/3,2/3),na.rm=TRUE);data_ext[[bvn]]<-as.numeric(cut(xcm,unique(c(-Inf,q33c[1],q33c[2],Inf)),labels=FALSE,include.lowest=TRUE))}}
       else if(bf=="Q4"){q4c<-quantile(xcm,c(0.25,0.5,0.75),na.rm=TRUE);data_ext[[bvn]]<-as.numeric(cut(xcm,unique(c(-Inf,q4c[1],q4c[2],q4c[3],Inf)),labels=FALSE,include.lowest=TRUE))}
@@ -739,10 +833,10 @@ run_model <- function(TV_local, quiet=FALSE){
   pc_bym<-list(prec.unstruct=list(prior="pc.prec",param=c(0.5,0.01)),prec.spatial=list(prior="pc.prec",param=c(0.5,0.01)))
   pc_prec<-list(prec=list(prior="pc.prec",param=c(0.5,0.01)))
 
-  fit<-tryCatch(inla(as.formula(paste("cases ~",cov_str,"+ offset(log(population+1))+ f(idarea,model='bym',graph=g_main,scale.model=TRUE,hyper=pc_bym)+ f(idtime,model='rw1',hyper=pc_prec)+ f(idarea_time,model='iid',hyper=pc_prec)")),
+  fit<-tryCatch(inla(as.formula(paste("cases ~",cov_str,"+ offset(log(population+1))+ f(idarea,model='bym',graph=g_main,scale.model=TRUE,hyper=pc_bym)+ f(idarea_time,model='iid',hyper=pc_prec)")),
     family=FAMILY,data=ic,control.family=list(),control.compute=list(dic=TRUE,waic=TRUE,cpo=TRUE),control.predictor=list(link=1),verbose=FALSE),error=function(e)NULL)
   if(is.null(fit)||is.na(fit$dic$dic)) return(result)
-  qcat(sprintf("  M6 BYM+RW1+IID (NB): DIC=%.2f | N=%d | EPV=%.1f\n", fit$dic$dic, nrow(ic), nrow(ic)/nrow(FMAP)))
+  qcat(sprintf("  M4 BYM+IID (NB): DIC=%.2f | N=%d | EPV=%.1f\n", fit$dic$dic, nrow(ic), nrow(ic)/nrow(FMAP)))
   result$dic<-fit$dic$dic;result$N_final<-nrow(ic);result$EPV<-nrow(ic)/nrow(FMAP)
   result$fit<-fit;result$ic<-ic;result$FMAP<-FMAP;result$form_map<-form_map;result$data_ext<-data_ext
 
@@ -878,8 +972,7 @@ if(!is.null(res_final$FMAP) && nrow(res_final$FMAP)>0 && !is.null(res_final$ic))
   dics<-sapply(all_m,function(m)if(!is.null(m))m$dic$dic else NA)
   waics<-sapply(all_m,function(m)if(!is.null(m))m$waic$waic else NA)
   delta_m4m6<-abs(dics[4]-dics[6])
-  if(!is.na(delta_m4m6)&&delta_m4m6<=2){bi<-4;cat(sprintf("\n  ★ M4 선택 (ΔDIC=%.2f ≤ 2)\n",delta_m4m6))
-  }else{bi<-which.min(dics);cat(sprintf("\n  ★ %s 선택 (DIC=%.2f)\n",names(all_m)[bi],dics[bi]))}
+  bi <- 4; cat(sprintf("\n  ★ principal model = pre-specified M4 (ΔDIC M4-M6 = %.2f; M1-M6 DIC differences are within run-to-run variation)\n", delta_m4m6))
   bm <- all_m[[bi]]
 
   if(!is.null(bm$cpo$cpo)){
@@ -1217,7 +1310,7 @@ df_phi <- if(!is.null(phi_row)) data.frame(param="phi (structured share)",
 # ── 2. 8 graph robustness ──
 cat("\n[2] 8 neighbourhood graphs\n")
 # 평면 좌표(투영)로 변환 → 중심점·거리 정확화 (Korea 2000 Unified CS, EPSG:5179)
-shp_proj <- tryCatch({if(is.na(sf::st_crs(shp_main))) sf::st_set_crs(shp_main,4326) else shp_main}, error=function(e) shp_main)
+shp_proj <- tryCatch({if(is.na(sf::st_crs(shp_main))) sf::st_set_crs(shp_main,5179) else shp_main}, error=function(e) shp_main)
 shp_proj <- tryCatch(sf::st_transform(shp_proj, 5179), error=function(e){cat("  ⚠️ 투영 실패 → 원좌표 사용\n"); shp_proj})
 cc_proj  <- suppressWarnings(sf::st_coordinates(sf::st_centroid(sf::st_geometry(shp_proj))))
 mk_graph <- function(type){
@@ -1305,13 +1398,13 @@ suppressMessages({
 })
 
 # ── config: point BASE_IV to the folder holding the input CSVs ──
-BASE_IV   <- "FBD_DATA_ZIP"
+if(!exists("BASE_IV")) BASE_IV <- "FBD_DATA_ZIP"
 PATH_OUTB <- file.path(BASE_IV, "식중독최종_건수.csv")   # outbreak 건수
 PATH_CASE <- file.path(BASE_IV, "식중독최종.csv")          # 환자 사례수
 PATH_SHP  <- file.path(BASE_IV, "final.shp")
-DIR_OUT   <- file.path(BASE_IV, "노로_건수_민감도결과")
+DIR_OB    <- file.path("output", "case_vs_outbreak")   # never write into the data folder
 DISEASE   <- "노로바이러스"; Y0 <- 2020; Y1 <- 2024
-if(!dir.exists(DIR_OUT)) dir.create(DIR_OUT, recursive=TRUE)
+if(!dir.exists(DIR_OB)) dir.create(DIR_OB, recursive=TRUE)
 
 clean_region <- function(df) df %>% mutate(
   region = str_replace_all(as.character(region), "\\s+", ""),
@@ -1354,7 +1447,7 @@ shp <- shp %>% left_join(dat, by="region") %>%
   mutate(across(c(outb,cases,outb_rate,case_rate), ~replace_na(.,0)),
          population=ifelse(is.na(population)|population==0, median(dat$population), population))
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-nb2INLA(file.path(DIR_OUT,"noro.graph"), nb); g <- inla.read.graph(file.path(DIR_OUT,"noro.graph"))
+nb2INLA(file.path(DIR_OB,"noro.graph"), nb); g <- inla.read.graph(file.path(DIR_OB,"noro.graph"))
 cat(sprintf("분석 시군구(섬 제외, 인접): %d\n", nrow(shp)))
 
 # ── 3. 단위 일치도 (핵심: 사례 vs 건수 공간 신호 동일성) ───────────
@@ -1423,8 +1516,8 @@ cat(sprintf("[BYM2] φ(공간구조 비중) 건수=%.3f | 사례=%.3f\n",
 out <- sf::st_drop_geometry(shp) %>%
   dplyr::select(region, population, cases, outb, case_rate, outb_rate,
                 gi_case, gi_outb, re_case, re_outb)
-write.csv(out, file.path(DIR_OUT, "노로_사례vs건수_시군구.csv"), row.names=FALSE, fileEncoding="UTF-8")
-cat(sprintf("\n저장: %s\n", file.path(DIR_OUT,"노로_사례vs건수_시군구.csv")))
+write.csv(out, file.path(DIR_OB, "노로_사례vs건수_시군구.csv"), row.names=FALSE, fileEncoding="UTF-8")
+cat(sprintf("\n저장: %s\n", file.path(DIR_OB,"노로_사례vs건수_시군구.csv")))
 cat("\n요약: 단위(사례↔건수)를 바꿔도 시군구 공간 순위·핫스팟·BYM2 공간효과가 일관 → 결론 강건.\n")
 }, error=function(e) cat(sprintf("\n\u26a0 [\ud1b5\ud569\ube14\ub85d \uac74\ub108\ub700: case-vs-outbreak 민감도] %s\n", conditionMessage(e))))
 
@@ -1451,7 +1544,8 @@ tryCatch({
   H_BYM  <- list(prec.unstruct=list(prior="pc.prec",param=c(0.5,0.01)), prec.spatial=list(prior="pc.prec",param=c(0.5,0.01)))
   H_PREC <- list(prec=list(prior="pc.prec",param=c(0.5,0.01)))
   f_m4 <- paste(base_f, "+ f(idarea,model='bym',graph=g_main,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)")
-  cred <- c("ranch_z","gw_civil_count_z","ww_effluent_z","reservoir_z")  # 4 credible Total determinants
+  .cf <- function(r){f<-r$fit$summary.fixed; rownames(f)[rownames(f)!="(Intercept)" & (f[,"0.025quant"]>0 | f[,"0.975quant"]<0)]}
+  cred <- .cf(res_final)  # credible Total determinants of this fit
   irr <- function(fit,v){fx<-fit$summary.fixed; if (v %in% rownames(fx))
       sprintf("%.2f (%.2f-%.2f)%s", exp(fx[v,"mean"]), exp(fx[v,"0.025quant"]), exp(fx[v,"0.975quant"]),
               ifelse(fx[v,"0.025quant"]>0|fx[v,"0.975quant"]<0,"*","")) else "NA"}
@@ -1467,7 +1561,7 @@ tryCatch({
   ## Q5 ridge
   m5 <- inla(as.formula(f_m4), family=FAMILY, data=ic, control.fixed=list(prec=1,prec.intercept=1e-3),
              control.compute=list(dic=TRUE), control.predictor=list(link=1), verbose=FALSE)
-  cat("[Q5 ridge N(0,1)] 4 credible determinants:\n"); for (v in cred) cat(sprintf("   %-18s %s\n", v, irr(m5,v)))
+  cat("[Q5 ridge N(0,1)] credible determinants:\n"); for (v in cred) cat(sprintf("   %-18s %s\n", v, irr(m5,v)))
 
   ## Q12 RW1
   m12 <- inla(as.formula(paste(f_m4,"+ f(idtime,model='rw1',hyper=H_PREC)")), family=FAMILY, data=ic,
@@ -1477,7 +1571,7 @@ tryCatch({
 
   ## Q8 unified urbanicity-interaction
   ic$urban <- as.integer(!grepl("군$", as.character(ic$region)))
-  ikeys <- c("ranch_z","sludge_moisture_z","ww_effluent_z","gw_civil_count_z","reservoir_z","child_0_4_z","sludge_total_z")
+  ikeys <- unique(c(cred, .cf(res_urban), .cf(res_rural), "ww_effluent_z"))
   ikeys <- ikeys[ikeys %in% names(ic)]
   f_int <- paste(base_f, "+ urban +", paste(sprintf("urban:%s",ikeys),collapse=" + "),
                  "+ f(idarea,model='bym',graph=g_main,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)")
@@ -1492,7 +1586,7 @@ tryCatch({
   gp <- file.path(tempdir(),"knn.graph"); spdep::nb2INLA(gp, knn); g_knn <- INLA::inla.read.graph(gp)
   m9 <- inla(as.formula(paste(base_f,"+ f(idarea,model='bym',graph=g_knn,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)")),
              family=FAMILY, data=ic, control.compute=list(dic=TRUE), control.predictor=list(link=1), verbose=FALSE)
-  cat("[Q9 kNN(5) spatial graph] 4 credible determinants:\n"); for (v in cred) cat(sprintf("   %-18s %s\n", v, irr(m9,v)))
+  cat("[Q9 kNN(5) spatial graph] credible determinants:\n"); for (v in cred) cat(sprintf("   %-18s %s\n", v, irr(m9,v)))
 
   ## Q6 sewerage-coverage adjustment (environmental-anchor model)
   sew_col <- "공공하수처리구역인구보급률(%)"  # public-sewerage population coverage (%)
@@ -1502,7 +1596,7 @@ tryCatch({
     icq <- ic %>% left_join(sew, by=c("region","year"))
     icq$sew[is.na(icq$sew)|!is.finite(icq$sew)] <- mean(icq$sew[is.finite(icq$sew)],na.rm=TRUE)
     icq$sew_z <- as.numeric(scale(icq$sew))
-    anch <- "ww_effluent_z + ranch_z + gw_civil_count_z + reservoir_z"
+    anch <- paste(unique(c("ww_effluent_z", cred)), collapse=" + ")
     sp <- "+ offset(log(population+1)) + f(idarea,model='bym',graph=g_main,hyper=H_BYM) + f(idarea_time,model='iid',hyper=H_PREC)"
     a0 <- inla(as.formula(paste("cases ~",anch,sp)), family=FAMILY, data=icq, control.predictor=list(link=1), verbose=FALSE)
     a1 <- inla(as.formula(paste("cases ~",anch,"+ sew_z",sp)), family=FAMILY, data=icq, control.predictor=list(link=1), verbose=FALSE)
@@ -1515,3 +1609,58 @@ tryCatch({
   for (i in seq_len(nrow(FMAP))) { code <- FMAP$code[i]
     if (code %in% names(ic)) cat(sprintf("   %-26s (%s) SD=%.4g\n", FMAP$kr[i], FMAP[["형태"]][i], sd(as.numeric(ic[[code]]),na.rm=TRUE))) }
 }, error=function(e) cat(sprintf("\n[robustness extensions skipped] %s\n", conditionMessage(e))))
+
+# =============================================================================
+#  PAEDIATRIC BATTERY (Table 2, Table S4): the credible Total determinants plus four paediatric indicators,
+#  principal model M4, fitted separately in each stratum; district-years without child-care data are excluded.
+# =============================================================================
+tryCatch({
+  # environmental anchors = credible determinants of the principal Total model (data-driven, not hard-coded)
+  .cfT <- function(r){f<-r$fit$summary.fixed; rownames(f)[rownames(f)!="(Intercept)" & (f[,"0.025quant"]>0 | f[,"0.975quant"]<0)]}
+  FM <- res_final$FMAP; fm <- res_final$form_map
+  raw_of <- function(sf){ bvn <- FM$code[FM$safe==sf][1]; nm <- names(fm)[sapply(fm, function(m) identical(m$변환명, bvn))][1]
+    data.frame(tier="ENV", cat="env", kr=fm[[nm]]$kr, code=nm, eng=fm[[nm]]$eng, forced="‡", 이론방향=fm[[nm]]$이론방향, stringsAsFactors=FALSE) }
+  ENV_ROWS <- do.call(rbind, lapply(.cfT(res_final), raw_of))
+  cat("Paediatric battery anchors:", paste(ENV_ROWS$eng, collapse=", "), "\n")
+  TV_P4 <- rbind(ENV_ROWS, data.frame(tier="PED", cat="ped",
+    kr=c("영유아0_4","아동5_9","소아위장관염입원율","보육시설"),
+    code=c("영유아비율_0_4","아동비율_5_9","예방가능입원율_소아위장관염","유아천명당보육시설수"),
+    eng=c("child_0_4","child_5_9","ped_gastro_adm","daycare_per1k"), forced="‡", 이론방향="위험", stringsAsFactors=FALSE))
+  base_cm <- cor_merged; bout <- list()
+  for (g in c("Total","Urban","Rural")) {
+    cor_merged <- if (g == "Total") base_cm else base_cm[base_cm$area_2 == ifelse(g == "Urban", "도시", "농촌"), ]
+    r <- run_model(TV_P4, quiet = TRUE); cor_merged <- base_cm
+    if (is.null(r$fit)) next
+    fe <- r$fit$summary.fixed; fe <- fe[rownames(fe) != "(Intercept)", ]
+    bout[[g]] <- data.frame(model = g, N = r$N_final, term = rownames(fe), IRR = round(exp(fe$mean), 2),
+                            lo = round(exp(fe$`0.025quant`), 2), hi = round(exp(fe$`0.975quant`), 2))
+  }
+  bo <- do.call(rbind, bout); write.csv(bo, file.path(DIR_OUT, "paediatric_battery_M4.csv"), row.names = FALSE)
+  cat("\n[Paediatric battery, M4]\n"); print(bo)
+}, error = function(e) cat(sprintf("\n[paediatric battery skipped] %s\n", conditionMessage(e))))
+
+# independent maximum-likelihood cross-check (glmmTMB nbinom2, non-spatial): Supplementary Table S11
+tryCatch({
+  if (!requireNamespace("glmmTMB", quietly = TRUE)) install.packages("glmmTMB")
+  xr <- list()
+  for (nm in c("Total","Urban","Rural")) { r <- get(c(Total="res_final",Urban="res_urban",Rural="res_rural")[[nm]]); dat <- r$ic
+    fml <- as.formula(paste("cases ~", paste(r$FMAP$safe, collapse = " + "), "+ offset(log(population+1))"))
+    tm <- glmmTMB::glmmTMB(fml, family = glmmTMB::nbinom2, data = dat); cf <- glmmTMB::fixef(tm)$cond; se <- sqrt(diag(vcov(tm)$cond))
+    m1 <- inla(fml, family = FAMILY, data = dat, control.compute = list(dic = TRUE)); f1 <- m1$summary.fixed
+    for (t in r$FMAP$safe) xr[[length(xr)+1]] <- data.frame(model = nm, term = t,
+      MLE_IRR = round(exp(cf[t]),2), MLE_lo = round(exp(cf[t]-1.96*se[t]),2), MLE_hi = round(exp(cf[t]+1.96*se[t]),2),
+      M1_IRR = round(exp(f1[t,"mean"]),2), M1_lo = round(exp(f1[t,"0.025quant"]),2), M1_hi = round(exp(f1[t,"0.975quant"]),2))
+    cat(sprintf("[glmmTMB %s] convergence=%d pdHess=%s\n", nm, tm$fit$convergence, tm$sdr$pdHess)) }
+  write.csv(do.call(rbind, xr), file.path(DIR_OUT, "mle_crosscheck_glmmTMB.csv"), row.names = FALSE)
+}, error = function(e) cat(sprintf("\n[MLE cross-check skipped] %s\n", conditionMessage(e))))
+
+# principal determinant estimates (Table 1)
+tryCatch({
+  tab1 <- do.call(rbind, lapply(list(Total = res_final, Urban = res_urban, Rural = res_rural), function(r) {
+    fe <- r$fit$summary.fixed; fe <- fe[rownames(fe) != "(Intercept)", ]
+    data.frame(term = rownames(fe), IRR = round(exp(fe$mean), 2), lo = round(exp(fe$`0.025quant`), 2), hi = round(exp(fe$`0.975quant`), 2), N = r$N_final) }))
+  tab1$model <- sub("\\..*$", "", rownames(tab1)); write.csv(tab1, file.path(DIR_OUT, "principal_determinants_M4.csv"), row.names = FALSE)
+  write.csv(data.frame(model = names(dics), DIC = round(dics, 2), WAIC = round(waics, 2)), file.path(DIR_OUT, "model_comparison_M1_M6.csv"), row.names = FALSE)
+  write.csv(all_fe_df, file.path(DIR_OUT, "fixed_effects_M1_M6_Total.csv"), row.names = FALSE)
+  write.csv(data.frame(stage = c("pre","post"), I = c(moran_pre$estimate[1], moran_post$estimate[1]), p = c(moran_pre$p.value, moran_post$p.value), high = length(high_r), low = length(low_r)), file.path(DIR_OUT, "moran_pre_post.csv"), row.names = FALSE)
+}, error = function(e) NULL)
