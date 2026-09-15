@@ -39,6 +39,11 @@ Version 2 corrects the data preparation and model specification of version 1:
   counting-unit sensitivity → robustness extensions (CPO, ridge-type regularisation, RW1 temporal effects, unified
   urbanicity-interaction model, k-nearest-neighbour graph, sewerage-coverage adjustment) → paediatric battery →
   result tables.
+- `sensitivity_filled_years_influence.R` — sensitivity of the principal estimates to the filled covariate years
+  (district mean of observed years, linear interpolation, omission of the filled covariates, observed values only
+  for 2020–2023) and to individual years and district-years (each year omitted; the district-years with the largest
+  case counts excluded); Supplementary Table S12. Run as `SENS=<specification> Rscript sensitivity_filled_years_influence.R`
+  (specifications are listed in the script header).
 - `ext_wastewater_kosis.csv` — district industrial wastewater discharge (m³/day), 2020–2023.
 - `DATA_DICTIONARY.md` — English glosses for every district-level covariate.
 
@@ -72,6 +77,10 @@ Total model (1,115 district-years) — total livestock head 1.88 (1.19–2.96), 
 urbanicity-interaction model, livestock × urban 3.98 (1.69–9.41). Two independent runs reproduce every IRR to
 within 0.02 and every DIC to within 0.5. An independent maximum-likelihood fit (glmmTMB, written to
 `output/mle_crosscheck_glmmTMB.csv`) agrees with the INLA estimates of the non-spatial model to two decimals.
+In `sensitivity_filled_years_influence.R`, the sludge-moisture association remains credible under every alternative
+handling of the filled covariate years and after excluding the district-years with the largest case counts, whereas the
+total livestock head association is not credible when 2024 is omitted or when the district-year with the largest case
+count is excluded (Total 1.06, 0.64–1.74).
 
 ## Citation
 Kim S, Chun BC. Divergent urban and rural environmental drivers of foodborne norovirus infections and their
