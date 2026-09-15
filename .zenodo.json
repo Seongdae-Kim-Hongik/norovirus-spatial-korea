@@ -1,5 +1,5 @@
 {
-  "title": "Divergent urban and rural environmental drivers of foodborne norovirus infections and their dissociation from paediatric disease burden in South Korea — analysis code",
+  "title": "Urban–rural comparison of environmental determinants of foodborne norovirus infections and their dissociation from paediatric disease burden in South Korea — analysis code",
   "description": "Reproducible R (R-INLA) analysis code for a district-level Bayesian negative-binomial Besag–York–Mollié spatial analysis of foodborne norovirus across South Korean districts, 2020–2024 (urban/rural stratified; covariate-year harmonisation and a priori covariate transformations; paediatric battery; BYM2, district adjacency graph and prior robustness; case-versus-outbreak sensitivity). Version 2 corrects covariate-year harmonisation and missing-value coding and estimates covariate effects in the principal model M4. Version 2.1 adds a script for the sensitivity of the principal estimates to the filled covariate years and to individual years and district-years. Manuscript under review at Scientific Reports. Input data are aggregated official statistics with no personal identifiers; apart from the public district wastewater-discharge series, they are not redistributed.",
   "upload_type": "software",
   "license": "MIT",

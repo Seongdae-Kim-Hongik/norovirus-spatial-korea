@@ -4,7 +4,7 @@
 
 
 Reproducible R analysis code for the manuscript:
-**"Divergent urban and rural environmental drivers of foodborne norovirus infections and their dissociation from paediatric disease burden in South Korea"** (under review at *Scientific Reports*).
+**"Urban–rural comparison of environmental determinants of foodborne norovirus infections and their dissociation from paediatric disease burden in South Korea"** (under review at *Scientific Reports*).
 
 ## Version 2 (revision)
 Version 2 corrects the data preparation and model specification of version 1:
@@ -83,7 +83,7 @@ total livestock head association is not credible when 2024 is omitted or when th
 count is excluded (Total 1.06, 0.64–1.74).
 
 ## Citation
-Kim S, Chun BC. Divergent urban and rural environmental drivers of foodborne norovirus infections and their
+Kim S, Chun BC. Urban–rural comparison of environmental determinants of foodborne norovirus infections and their
 dissociation from paediatric disease burden in South Korea (manuscript under review). Archived code:
 https://doi.org/10.5281/zenodo.20725142 (Zenodo). Citation to be updated on publication.
 
