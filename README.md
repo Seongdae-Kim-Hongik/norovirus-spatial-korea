@@ -29,6 +29,7 @@ Version 2 corrects the data preparation and model specification of version 1:
 - The k-nearest-neighbour graphs use the EPSG:5179 coordinates of the boundary file, and the robustness
   extensions use the credible determinants of the fitted model.
 - The paediatric battery (Table 2) is fitted in the script.
+- **Version 2.2:** variance-inflation pruning is enforced for every covariate (previously the loop stopped when the covariate with the largest VIF was one retained a priori); removed covariates and the final maximum VIF are printed in the run log.
 
 ## Contents
 - `norovirus_spatial_korea.R` — full pipeline: data loading → covariate-year harmonisation and a priori
@@ -44,6 +45,7 @@ Version 2 corrects the data preparation and model specification of version 1:
   for 2020–2023) and to individual years and district-years (each year omitted; the district-years with the largest
   case counts excluded); Supplementary Table S12. Run as `SENS=<specification> Rscript sensitivity_filled_years_influence.R`
   (specifications are listed in the script header).
+- `targeted_validation/` — post hoc targeted analyses of the sludge-moisture association (Supplementary Table S13): `prepare_analysis_input.R` rebuilds the harmonised panel, `run_targeted_models.R` fits single-exposure case- and outbreak-count models and the facility-separated model (INLA M4 and glmmTMB), and `run_hurdle_mle_check.R` repeats the facility-separated model by maximum likelihood.
 - `ext_wastewater_kosis.csv` — district industrial wastewater discharge (m³/day), 2020–2023.
 - `DATA_DICTIONARY.md` — English glosses for every district-level covariate.
 
@@ -69,18 +71,20 @@ Rscript norovirus_spatial_korea.R
 The script writes tables and a run log to `output/`. R-INLA fits take roughly 10–30 minutes depending on the machine.
 
 ## Reproducibility
-The script reproduces the manuscript estimates (principal model M4; incidence rate ratios per 1 SD, 95% CrI):
-Total model (1,115 district-years) — total livestock head 1.88 (1.19–2.96), sludge-moisture content 1.61
-(1.10–2.36); Urban model (730) — total livestock head 2.62 (1.51–4.52); Rural model (385) — storm-water gullies
-0.28 (0.09–0.85). Global Moran's I +0.036 → residual −0.004, with 0 high- and 0 low-risk districts; M1–M6 DIC
-2,416.2–2,417.0 (differences within run-to-run variation); BYM2 φ = 0.36 (0.01–0.94); unified
-urbanicity-interaction model, livestock × urban 3.98 (1.69–9.41). Two independent runs reproduce every IRR to
-within 0.02 and every DIC to within 0.5. An independent maximum-likelihood fit (glmmTMB, written to
-`output/mle_crosscheck_glmmTMB.csv`) agrees with the INLA estimates of the non-spatial model to two decimals.
+The script reproduces the manuscript estimates (principal model M4; incidence rate ratios per 1 SD, 95% CrI).
+After variance-inflation pruning, 22 (Total), 23 (Urban) and 18 (Rural) covariates are retained. Total model
+(1,115 district-years) — total livestock head 1.83 (1.24–2.70), sludge-moisture content 1.61 (1.13–2.30), fiscal
+autonomy 0.62 (0.40–0.96); Urban model (730) — total livestock head 2.06 (1.26–3.37), fiscal independence 1.89
+(1.01–3.55); Rural model (385) — storm-water gullies 0.28 (0.09–0.85). Global Moran's I +0.036 → residual
+-0.004, with 0 high- and 0 low-risk districts; M1–M6 DIC 2,397.5–2,399.9; BYM2 φ = 0.34
+(0.01–0.94); unified urbanicity-interaction model, livestock × urban 3.36 (1.42–7.95).
+Two independent runs reproduce the principal-model IRRs to within 0.01 and the paediatric-battery IRRs to within
+0.03. An independent maximum-likelihood fit (glmmTMB, written to `output/mle_crosscheck_glmmTMB.csv`) agrees with the
+INLA estimates of the non-spatial model to two decimals.
 In `sensitivity_filled_years_influence.R`, the sludge-moisture association remains credible under every alternative
 handling of the filled covariate years and after excluding the district-years with the largest case counts, whereas the
 total livestock head association is not credible when 2024 is omitted or when the district-year with the largest case
-count is excluded (Total 1.06, 0.64–1.74).
+count is excluded. The scripts in `targeted_validation/` reproduce Supplementary Table S13.
 
 ## Citation
 Kim S, Chun BC. Urban–rural comparison of environmental determinants of foodborne norovirus infections and their

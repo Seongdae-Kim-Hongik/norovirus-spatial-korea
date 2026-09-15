@@ -805,11 +805,17 @@ run_model <- function(TV_local, quiet=FALSE){
   forced_c<-best_df$code[best_df$forced=="‡"]; final_vars<-pass_vars
   vif_data<-data_ext[,c("cases",final_vars),drop=FALSE];for(v in final_vars)vif_data[[v]]<-as.numeric(vif_data[[v]])
   vif_data<-vif_data[complete.cases(vif_data),]
+  vif_removed<-character(0)
   for(stp in 1:40){if(length(final_vars)<=1)break
     lm_t<-tryCatch(lm(as.formula(paste("cases~",paste(paste0("`",final_vars,"`"),collapse="+"))),data=vif_data),error=function(e)NULL)
     if(is.null(lm_t))break;vv<-tryCatch(car::vif(lm_t),error=function(e)NULL);if(is.null(vv))break
     names(vv)<-gsub("`","",names(vv));if(max(vv,na.rm=TRUE)<VIF_THRESHOLD)break
-    drop<-names(which.max(vv));if(drop%in%forced_c)break;final_vars<-final_vars[final_vars!=drop]}
+    over<-vv[vv>=VIF_THRESHOLD];nf<-over[!names(over)%in%forced_c]
+    drop<-if(length(nf)>0) names(which.max(nf)) else names(which.max(over))   # VIF<threshold is enforced for every covariate; non-forced covariates are removed first
+    vif_removed<-c(vif_removed,sprintf("%s(%.1f)",drop,vv[drop]));final_vars<-final_vars[final_vars!=drop]}
+  vif_final<-tryCatch({lm_f<-lm(as.formula(paste("cases~",paste(paste0("`",final_vars,"`"),collapse="+"))),data=vif_data);vf<-car::vif(lm_f);max(vf,na.rm=TRUE)},error=function(e)NA)
+  qcat(sprintf("  VIF pruning removed %d: %s | final max VIF = %.2f\n",length(vif_removed),paste(vif_removed,collapse=", "),vif_final))
+  result$vif_removed<-vif_removed;result$vif_final<-vif_final
   if(length(final_vars)==0) return(result)
   qcat(sprintf("  INLA 투입: %d변수 (VIF<%d)\n", length(final_vars), VIF_THRESHOLD))
 
