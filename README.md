@@ -4,7 +4,7 @@
 
 
 Reproducible R analysis code for the manuscript:
-**"Urban–rural comparison of environmental determinants of foodborne norovirus infections and their dissociation from paediatric disease burden in South Korea"** (under review at *Scientific Reports*).
+**"Urban–rural comparison of environmental determinants of foodborne norovirus infections and their relation to paediatric disease burden in South Korea"** (under review at *Scientific Reports*).
 
 ## Version 2 (revision)
 Version 2 corrects the data preparation and model specification of version 1:
@@ -88,7 +88,7 @@ count is excluded. The scripts in `targeted_validation/` reproduce Supplementary
 
 ## Citation
 Kim S, Chun BC. Urban–rural comparison of environmental determinants of foodborne norovirus infections and their
-dissociation from paediatric disease burden in South Korea (manuscript under review). Archived code:
+relation to paediatric disease burden in South Korea (manuscript under review). Archived code:
 https://doi.org/10.5281/zenodo.20725142 (Zenodo). Citation to be updated on publication.
 
 ## License
