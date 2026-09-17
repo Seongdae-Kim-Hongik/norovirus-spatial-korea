@@ -46,6 +46,7 @@ Version 2 corrects the data preparation and model specification of version 1:
   case counts excluded); Supplementary Table S12. Run as `SENS=<specification> Rscript sensitivity_filled_years_influence.R`
   (specifications are listed in the script header).
 - `targeted_validation/` — post hoc targeted analyses of the sludge-moisture association (Supplementary Table S13): `prepare_analysis_input.R` rebuilds the harmonised panel, `run_targeted_models.R` fits single-exposure case- and outbreak-count models and the facility-separated model (INLA M4 and glmmTMB), and `run_hurdle_mle_check.R` repeats the facility-separated model by maximum likelihood.
+- `evidence_grading/` — strength-of-evidence grading (Supplementary Table S14): `evidence_fit.R` refits the principal models to obtain posterior direction probabilities (`MODE=principal`) and fits all pre-specified covariates with a ridge-type prior (`MODE=ridge31`); `assemble_evidence.py` applies the grading criteria.
 - `ext_wastewater_kosis.csv` — district industrial wastewater discharge (m³/day), 2020–2023.
 - `DATA_DICTIONARY.md` — English glosses for every district-level covariate.
 
