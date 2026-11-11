@@ -1,6 +1,6 @@
 # Foodborne norovirus — district-level Bayesian spatial analysis, Republic of Korea, 2020–2024
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20725142.svg)](https://doi.org/10.5281/zenodo.20725142)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24147975.svg)](https://doi.org/10.5281/zenodo.24147975)
 
 
 Reproducible R analysis code for the manuscript:
@@ -8,7 +8,7 @@ Reproducible R analysis code for the manuscript:
 
 ## Version 2.4.0 — R2 moisture correction
 
-Use [`revision_R2/`](revision_R2/) for the corrected R2 analysis. R1 outcomes remain frozen at **4,801 cases, 220 outbreaks and 1,115 district-years**. This release corrects sludge-moisture aggregation by excluding totals/subtotals and inappropriate zero codes, using valid readings at positive-generation facilities, and explicitly representing unavailable measurements. It includes the correction code, reanalyses, validated full-precision outputs and required-input instructions. The earlier national positive moisture association is not reproduced in the corrected principal analysis (IRR 0.99, 95% CrI 0.53–1.84). Rural estimates are imprecise, and livestock estimates are sensitive to influential observations.
+Use [`revision_R2/`](revision_R2/) for the corrected R2 analysis. The immutable v2.4.0 archive is https://doi.org/10.5281/zenodo.24147975 (GitHub-linked concept DOI: 10.5281/zenodo.22758291). The earlier manually deposited R1 archive has a separate DOI series. R1 outcomes remain frozen at **4,801 cases, 220 outbreaks and 1,115 district-years**. This release corrects sludge-moisture aggregation by excluding totals/subtotals and inappropriate zero codes, using valid readings at positive-generation facilities, and explicitly representing unavailable measurements. It includes the correction code, reanalyses, validated full-precision outputs and required-input instructions. The earlier national positive moisture association is not reproduced in the corrected principal analysis (IRR 0.99, 95% CrI 0.53–1.84). Rural estimates are imprecise, and livestock estimates are sensitive to influential observations.
 
 The root-level scripts and the documentation below are preserved as **legacy R1** provenance. They do not implement the R2 correction. R2 preserves the original covariate sets and adds a moisture-availability indicator; the resulting maximum urban VIF is 5.08, explicitly disclosed rather than reselecting covariates on the new outcomes. R2 uses explicit four-outer/one-inner INLA threads and documents numerical retries. See `revision_R2/README.md` for exact inputs and run order.
 
