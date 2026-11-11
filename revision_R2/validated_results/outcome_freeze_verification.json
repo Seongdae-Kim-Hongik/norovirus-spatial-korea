@@ -1,0 +1,10 @@
+{
+  "file": "식중독최종_건수.csv",
+  "google_drive_id": "1GjiqazvZYgC2fvQo1b6Ez6bcy7q8kHyb",
+  "raw_bytes": 211970659,
+  "sha256": "835e963b7a61c4b7496c03987a708a1ad80650ec2b52c3608cced6659941b6da",
+  "district_years": 1115,
+  "cases": 4801,
+  "outbreaks": 220,
+  "district_aggregate_matches_R1": 223
+}

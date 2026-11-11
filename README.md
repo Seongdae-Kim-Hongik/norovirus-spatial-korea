@@ -6,7 +6,13 @@
 Reproducible R analysis code for the manuscript:
 **"Urban–rural comparison of environmental determinants of foodborne norovirus infections and their relation to paediatric disease burden in South Korea"** (under review at *Scientific Reports*).
 
-## Version 2 (revision)
+## Version 2.4.0 — R2 moisture correction
+
+Use [`revision_R2/`](revision_R2/) for the corrected R2 analysis. R1 outcomes remain frozen at **4,801 cases, 220 outbreaks and 1,115 district-years**. This release corrects sludge-moisture aggregation by excluding totals/subtotals and inappropriate zero codes, using valid readings at positive-generation facilities, and explicitly representing unavailable measurements. It includes the correction code, reanalyses, validated full-precision outputs and required-input instructions. The earlier national positive moisture association is not reproduced in the corrected principal analysis (IRR 0.99, 95% CrI 0.53–1.84). Rural estimates are imprecise, and livestock estimates are sensitive to influential observations.
+
+The root-level scripts and the documentation below are preserved as **legacy R1** provenance. They do not implement the R2 correction. R2 preserves the original covariate sets and adds a moisture-availability indicator; the resulting maximum urban VIF is 5.08, explicitly disclosed rather than reselecting covariates on the new outcomes. R2 uses explicit four-outer/one-inner INLA threads and documents numerical retries. See `revision_R2/README.md` for exact inputs and run order.
+
+## Version 2 (R1 legacy revision)
 Version 2 corrects the data preparation and model specification of version 1:
 - **Covariate-year harmonisation.** Several administrative covariate series are not published every year and
   had been stored as zero, rather than missing, for all districts in those years. Such structurally missing

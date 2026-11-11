@@ -1,0 +1,40 @@
+{
+  "district_years": 1115,
+  "cases": 4801,
+  "positive_measurement_n": 802,
+  "status": {
+    "measured_generation_complete": 749,
+    "no_facility_row": 210,
+    "positive_generation_moisture_unavailable": 86,
+    "partial_measured_generation": 53,
+    "no_positive_sludge_generation": 17
+  },
+  "physical_min": 0.1,
+  "physical_max": 96.24,
+  "physical_mean": 80.09576210757044,
+  "physical_sd": 6.585909164544603,
+  "positive_below30": 4,
+  "duplicate_name_rows": 2,
+  "input_sources": [
+    {
+      "file": "공식_2020_하수도통계.xlsx",
+      "sha256": "7d802385c2183ab8337def9710f927ce85fadd379c56444d0c9c678749d66542"
+    },
+    {
+      "file": "공식_2021_하수도통계.xlsx",
+      "sha256": "6a3f5d4df9664a9cb87266be055e41c756ba74608b0a2060106c62ceda72c483"
+    },
+    {
+      "file": "공식_2022_하수도통계.xlsx",
+      "sha256": "7f6f23d50c608ca62988b8eacef02d2e0a25ee0f218d6958bd08b08672905372"
+    },
+    {
+      "file": "공식_2023_하수도통계.xlsx",
+      "sha256": "ac5bd677ea678f5759d5e252f29fcd4775d658f11e0918790a979526f4544b5e"
+    },
+    {
+      "file": "공식_2024_하수도통계.xlsx",
+      "sha256": "9e7eefe9bcab809a055b2f1749aeca9ab7969aa275bfa3bd4ad9a52e99a60cab"
+    }
+  ]
+}
