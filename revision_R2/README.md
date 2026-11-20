@@ -1,6 +1,6 @@
-# Norovirus spatial Korea — R2 correction (v2.4.0)
+# Norovirus spatial Korea — R2 correction (v2.4.1)
 
-This is the author-authorised R2 moisture-correction release, version 2.4.0. The existing v2.3.0 DOI covers R1 only; the repository concept DOI resolves to the versioned Zenodo archive.
+This is the author-authorised R2 moisture-correction release, version 2.4.1 (v2.4.0 plus the offset sensitivity script below). The existing v2.3.0 DOI covers R1 only; the repository concept DOI resolves to the versioned Zenodo archive.
 
 ## Scope
 The frozen outcomes are 4,801 cases and 220 outbreaks in 1,115 district-years (223 districts, 2020–2024). This update corrects plant/subtotal aggregation and zero codes in sludge moisture, retains the other R1 covariates, and repeats principal, paediatric, outbreak, graph, prior, influence and availability analyses. No individual patient information is included.
@@ -16,9 +16,13 @@ python3 correct_moisture_r2.py
 Rscript reanalyse_corrected_moisture.R
 Rscript reanalyse_additional_r2.R
 Rscript reanalyse_final_checks_r2.R
+Rscript sensitivity_offset_no_plus1.R
 ```
 
 Outputs are written only to `output/`. Do not run the R scripts concurrently: later stages extend the result CSV. Cached fits are reused. Raw physical moisture remains missing when not observed; a centred design entry and availability indicator are used to retain the outcome panel. Four source-reported 0.1% values are kept and tested separately without an unsupported unit conversion.
+
+## Offset sensitivity (v2.4.1)
+The published models use offset(log(population + 1)), a zero-population guard inherited from R1. All analysed district-year populations are positive (minimum 15,328), so `sensitivity_offset_no_plus1.R` refits the principal M4 in each stratum twice with offset(log(population)), refits the published specification once more, and compares these with the saved principal fits (run `reanalyse_corrected_moisture.R` first). It writes `output/offset_sensitivity_summary.csv` (credible covariate sets, maximum log-scale differences between offsets and between repeated runs, DIC and WAIC). Differences between saved fits include run-to-run numerical variation and do not isolate the effect of +1. The rural school-groundwater interval has a lower bound at unity and can change classification between repeated runs under either offset.
 
 ## Numerical qualification
 The manuscript reports first valid corrected M4 fits, their independent repeats, and the finite-start M5 refit (repeat_id=2). The initial M5 run with WAIC 30,958.6 is retained as a documented unstable result, not a reported model-comparison estimate. Failed/non-finite/non-positive-DIC fits were rejected; spatial fits were compared with corresponding non-spatial fits. Repeatability is not proof of global optimality. Rural estimates are especially uncertain. Full-precision validated results are provided for comparison; rounding is half up only at document generation.

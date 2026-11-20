@@ -1,6 +1,6 @@
 {
   "title": "Urban–rural comparison of environmental determinants of foodborne norovirus infections and their relation to paediatric disease burden in South Korea — analysis code",
-  "description": "Author-authorised R2 analysis-code release for the Scientific Reports norovirus revision. Outcomes remain frozen at 4,801 cases and 220 outbreaks across 1,115 district-years (223 districts, 2020–2024). The revision_R2 directory corrects official facility-level sludge-moisture aggregation, excludes totals/subtotals and inappropriate zero codes, and distinguishes 802 measured from 313 unavailable district-years. It includes principal, paediatric, outbreak-count, spatial-graph, prior, influential-observation, missing-administrative-year and moisture-availability analyses, numerical-repeat and independent maximum-likelihood checks, and validated full-precision results. The earlier positive national moisture association is not reproduced after correction. The archived R1 input object and official annual workbooks are required and are not bundled; precise input requirements and source hashes are documented. Root-level R1 scripts are retained for provenance. No individual patient information is included.",
+  "description": "Author-authorised R2 analysis-code release for the Scientific Reports norovirus revision. Outcomes remain frozen at 4,801 cases and 220 outbreaks across 1,115 district-years (223 districts, 2020–2024). The revision_R2 directory corrects official facility-level sludge-moisture aggregation, excludes totals/subtotals and inappropriate zero codes, and distinguishes 802 measured from 313 unavailable district-years. It includes principal, paediatric, outbreak-count, spatial-graph, prior, influential-observation, missing-administrative-year and moisture-availability analyses, numerical-repeat and independent maximum-likelihood checks, and validated full-precision results. Version 2.4.1 adds revision_R2/sensitivity_offset_no_plus1.R, which refits the principal M4 with offset log(population) instead of the inherited log(population + 1) zero-population guard and compares it with repeated fits under the published offset. The earlier positive national moisture association is not reproduced after correction. The archived R1 input object and official annual workbooks are required and are not bundled; precise input requirements and source hashes are documented. Root-level R1 scripts are retained for provenance. No individual patient information is included.",
   "upload_type": "software",
   "license": "MIT",
   "access_right": "open",
@@ -23,11 +23,11 @@
       "affiliation": "Department of Preventive Medicine, Korea University College of Medicine, Seoul, Republic of Korea; Department of Public Health, Korea University Graduate School, Seoul, Republic of Korea"
     }
   ],
-  "version": "v2.4.0",
-  "publication_date": "2026-11-12",
+  "version": "v2.4.1",
+  "publication_date": "2026-11-21",
   "related_identifiers": [
     {
-      "identifier": "https://github.com/Seongdae-Kim-Hongik/norovirus-spatial-korea/tree/v2.4.0",
+      "identifier": "https://github.com/Seongdae-Kim-Hongik/norovirus-spatial-korea/tree/v2.4.1",
       "relation": "isSupplementTo",
       "resource_type": "software"
     }
