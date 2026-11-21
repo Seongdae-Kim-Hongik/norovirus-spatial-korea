@@ -1,3 +1,13 @@
+# Version 2.4.2 — CPO and direct leave-one-out diagnostics
+
+Reserved release DOI: https://doi.org/10.5281/zenodo.24409613 (registered on publication).
+
+This release adds direct leave-one-out predictive checks, integrated singleton GCPO, Monte Carlo precision reporting, an independent full-Laplace/grid check and influence summaries. The principal analysis dataset and estimates are unchanged. See revision_R2/cpo_diagnostics/README.md for execution order and limitations.
+
+The Zenodo 2.4.2 ZIP is code/documentation only. It deliberately excludes input data, fitted objects and tabular result files. Earlier README references to input or validated_results directories describe requirements/earlier repository versions, not files bundled in this ZIP. The public GitHub history retains earlier files for provenance. No individual patient data are included.
+
+---
+
 # Foodborne norovirus — district-level Bayesian spatial analysis, Republic of Korea, 2020–2024
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24147975.svg)](https://doi.org/10.5281/zenodo.24147975)
